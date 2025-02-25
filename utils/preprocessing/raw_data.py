@@ -21,12 +21,12 @@ class TrainDelaysRawDataFileLoader:
     def __load_raw_data(self):
         try:
             with open(self.filepath, 'rb') as file:
-                self.__loaded_data = pickle.load(file)
+                self.__raw_data = pickle.load(file)
         except Exception as e:
             raise ValueError(f"Error loading pickle file: {e}")
         
     def get_data(self):
-        return self.__loaded_data
+        return self.__raw_data
     
 
 # TrainDelaysRawDataHandler
