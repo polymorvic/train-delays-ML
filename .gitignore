@@ -1,3 +1,13 @@
+venv_dev
+venv
+# dirs ---
 data/
+__pycache__
+#files ---
 .env
-env
+*.ipynb
+*.pkl
+*.parquet
+*.csv
+*.xlsx
+.DS_Store
