@@ -14,11 +14,11 @@ class TrainDelaysRawDataFileLoader:
             raise NotADirectoryError(f"Directory '{os.path.dirname(self.filepath)}' does not exist.")
         
         if self.filename.endswith(('.pickle', '.pkl')):
-            self.__load_pickle()
+            self.__load_raw_data()
         else:
             raise ValueError(f"Only pickle extension is supported - you provided: {self.filename.split('.')[-1]}")
 
-    def __load_pickle(self):
+    def __load_raw_data(self):
         try:
             with open(self.filepath, 'rb') as file:
                 self.__loaded_data = pickle.load(file)
