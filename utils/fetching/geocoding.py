@@ -7,7 +7,7 @@ class GoogleMapsGeocoder(requests.Session):
     STATION_COLNAME = 'stacja'
     LAT_COLNAME = 'lat'
     LON_COLNAME = 'lon'
-    PATTERN_TO_ERASE = ', railway station'
+    ADDITIONAL_PATTERN = ', railway station'
 
     def __init__(self):
         super().__init__()
@@ -38,9 +38,9 @@ class GoogleMapsGeocoder(requests.Session):
     def batch_geocode(self, locations: list[str]) -> list[dict[str, str|float]]:
         results = []
         for location in locations:
-            result = self.__fetch_geocode(location)
+            result = self.__fetch_geocode(f'{location}{self.ADDITIONAL_PATTERN}')
             results.append({
-                self.STATION_COLNAME: location.replace(self.PATTERN_TO_ERASE, ''),
+                self.STATION_COLNAME: location.replace(self.ADDITIONAL_PATTERN, ''),
                 self.LAT_COLNAME: result.geometry.location.lat if result else None,
                 self.LON_COLNAME: result.geometry.location.lng if result else None
             })
