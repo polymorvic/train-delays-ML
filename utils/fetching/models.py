@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 class AddressComponent(BaseModel):
     long_name: str
@@ -29,9 +30,9 @@ class Result(BaseModel):
     address_components: list[AddressComponent]
     formatted_address: str
     geometry: Geometry
-    navigation_points: list[NavigationPoint]
+    navigation_points: Optional[list[NavigationPoint]] = None
     place_id: str
-    plus_code: PlusCode
+    plus_code: Optional[PlusCode] = None
     types: list[str]
 
 class GMGeolocator(BaseModel):
