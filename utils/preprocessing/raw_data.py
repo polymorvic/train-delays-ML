@@ -66,7 +66,9 @@ class TrainDelaysRawDataHandler(TrainDelaysRawDataFileLoader):
 
     def __combine_dataframes(self):
         try:
-            return pd.concat(self.get_data(), ignore_index=True)
+            df = pd.concat(self.get_data(), ignore_index=True)
+            df.columns = df.columns.str.strip().str.lower()
+            return df
         except Exception as e:
             raise ValueError(f"Error combining dataframes: {e}")
     
