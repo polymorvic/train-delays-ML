@@ -1,6 +1,6 @@
 import requests, os
 from typing import Optional
-from .models import GMGeolocator, Result
+from .models.google_maps_geocoding_response import GMGeolocator, Result
 
 class GoogleMapsGeocoder(requests.Session):
     BASE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
