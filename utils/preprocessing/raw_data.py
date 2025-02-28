@@ -5,11 +5,11 @@ from typing import Callable
 SaveMethodSelector = dict[str, Callable]
 
 class TrainDelaysRawDataFileLoader:
-    raw_data_dir: str = 'data/raw'
+    RAW_DATA_DIR: str = 'data/raw'
 
     def __init__(self, filename: str) -> None:
         self.filename: str = filename
-        self.filepath: str = f'{self.raw_data_dir}/{self.filename}'
+        self.filepath: str = f'{self.RAW_DATA_DIR}/{self.filename}'
         self.__raw_data: list[pd.DataFrame] = None
 
         if not os.path.isfile(self.filepath):
@@ -43,8 +43,8 @@ class TrainDelaysRawDataFileLoader:
         return len(self.__raw_data), [len(df) for df in self.__raw_data] if self.__raw_data is not None else ''
 
 class TrainDelaysRawDataHandler(TrainDelaysRawDataFileLoader):
-    preprocessed_data_dir: str = 'data/preprocessed'
-
+    PREPROCESSED_DATA_DIR: str = 'data/preprocessed'
+    
     def __init__(self, filename: str, out_filename: str, autosave: bool = True):
         super().__init__(filename)
         self.extension = out_filename.split('.')[-1].lower()
@@ -53,7 +53,7 @@ class TrainDelaysRawDataHandler(TrainDelaysRawDataFileLoader):
             raise ValueError('Unknown extension or dot not provided.')
 
         self.out_filename = out_filename
-        self.output_fullpath: str = f'{self.preprocessed_data_dir}/{self.out_filename}'
+        self.output_fullpath: str = f'{self.PREPROCESSED_DATA_DIR}/{self.out_filename}'
         self.autosave: bool = autosave
         self.save_function_caller: SaveMethodSelector = {
             'parquet': self.__save_to_parquet,
