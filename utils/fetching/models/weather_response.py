@@ -1,0 +1,87 @@
+from pydantic import BaseModel
+from typing import Optional 
+
+class HourlyData(BaseModel):
+    datetime: str
+    datetimeEpoch: int
+    temp: float
+    feelslike: float
+    humidity: float
+    dew: float
+    precip: float
+    precipprob: float
+    snow: float
+    snowdepth: float
+    preciptype: Optional[list[str]]
+    windgust: Optional[float]
+    windspeed: float
+    winddir: float
+    pressure: float
+    visibility: float
+    cloudcover: float
+    solarradiation: float
+    solarenergy: float
+    uvindex: float
+    conditions: str
+    icon: str
+    stations: list[str]
+    source: str
+
+class DailyData(BaseModel):
+    datetime: str
+    datetimeEpoch: int
+    tempmax: float
+    tempmin: float
+    temp: float
+    feelslikemax: float
+    feelslikemin: float
+    feelslike: float
+    dew: float
+    humidity: float
+    precip: float
+    precipprob: float
+    precipcover: float
+    preciptype: Optional[list[str]]
+    snow: float
+    snowdepth: float
+    windgust: float
+    windspeed: float
+    winddir: float
+    pressure: float
+    cloudcover: float
+    visibility: float
+    solarradiation: float
+    solarenergy: float
+    uvindex: float
+    sunrise: str
+    sunriseEpoch: int
+    sunset: str
+    sunsetEpoch: int
+    moonphase: float
+    conditions: str
+    description: str
+    icon: str
+    stations: list[str]
+    source: str
+    hours: list[HourlyData]
+
+class StationData(BaseModel):
+    distance: float
+    latitude: float
+    longitude: float
+    useCount: int
+    id: str
+    name: str
+    quality: int
+    contribution: float
+
+class WeatherData(BaseModel):
+    queryCost: int
+    latitude: float
+    longitude: float
+    resolvedAddress: str
+    address: str
+    timezone: str
+    tzoffset: float
+    days: list[DailyData]
+    stations: dict[str, StationData]
