@@ -74,6 +74,7 @@ class TrainDelaysRawDataHandler(TrainDelaysRawDataFileLoader):
     
     def __save_to_parquet(self, output_path: str):
         try:
+            os.makedirs(self.PREPROCESSED_DATA_DIR, exist_ok=True)
             self.__raw_merged_data.to_parquet(output_path, index=False)
             print(f"Data saved to {output_path} in .parquet format.")
         except Exception as e:
