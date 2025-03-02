@@ -18,7 +18,7 @@ class GoogleMapsGeocoder(requests.Session):
     def __fetch_geocode(self, location: str) -> Optional[Result]:
         params = {
             "key": self.api_key,
-            "address": f"{location}, Railway Station"
+            "address": f"{location}"
         }
         response = self.get(self.BASE_URL, params=params)
         if response.status_code != 200:
