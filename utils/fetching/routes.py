@@ -11,7 +11,7 @@ class GoogleMapsRouteFetcher(requests.Session):
         "Content-Type": "application/json",
         "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline"
     }
-    DATA_DICT_KEYS: list = ['lat', 'lon', 'distance_m', 'duration', 'encoded_polyline_str', 'decoded_polyline',]
+    DATA_DICT_KEYS: list = ['start_lat', 'start_lon', 'dest_lat', 'dest_lon', 'distance_m', 'duration', 'encoded_polyline_str', 'decoded_polyline',]
     
     def __init__(self):
         super().__init__()
@@ -56,7 +56,7 @@ class GoogleMapsRouteFetcher(requests.Session):
             original_route_encoded_polyline_str: str = route.polyline.encodedPolyline
 
             route_duration_s, decoded_polyline = self._handle_original_response_data(original_route_duration_s, original_route_encoded_polyline_str)
-            values = [start_lat, start_lon, original_route_distance_m, route_duration_s, original_route_encoded_polyline_str, decoded_polyline]
+            values = [start_lat, start_lon, dest_lat, dest_lon, original_route_distance_m, route_duration_s, original_route_encoded_polyline_str, decoded_polyline]
 
         else:
             values = [None] * len(self.DATA_DICT_KEYS)
