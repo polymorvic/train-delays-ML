@@ -1,4 +1,5 @@
 import requests, os
+import pandas as pd
 from polyline import decode
 from haversine import haversine
 from typing import Optional
@@ -18,7 +19,7 @@ class GoogleMapsRouteFetcher(requests.Session):
         if not self.api_key:
             raise ValueError("Google Maps API Key is missing. Set it in the environment variables.")
         
-        self.data_dict: dict = {key: [] for key in self.DATA_DICT_KEYS}
+        self.__data_dict: dict = {key: [] for key in self.DATA_DICT_KEYS}
 
     def __fetch_route(self, start_lat: float, start_lon: float, dest_lat: float, dest_lon: float) -> Optional[Route]:
         req_body = {
@@ -61,7 +62,10 @@ class GoogleMapsRouteFetcher(requests.Session):
             values = [None] * len(self.DATA_DICT_KEYS)
 
         for key, value in zip(self.DATA_DICT_KEYS, values):
-            self.data_dict[key].append(value)
+            self.__data_dict[key].append(value)
+
+    def get_routes_data(self) -> pd.DataFrame:
+        return pd.DataFrame(self.__data_dict)
 
     @staticmethod
     def _polyline_decoder(encoded_polyline_str: str) -> list[tuple[float, float]]:
