@@ -124,7 +124,7 @@ class DataComposer(TrainDelaysRawDataHandler):
             self.weather_df = self.weather_data_service.batch_fetch_weather(self.weather_data_input_df.iloc)
 
         if self.autosave:
-            self.save_method_selector.save(save_format, self.stations_df, self.PREPROCESSED_DATA_DIR, self.weather_df_out_filename)
+            self.save_method_selector.save(save_format, self.weather_df, self.PREPROCESSED_DATA_DIR, self.weather_df_out_filename)
     
     def __prepare_input_for_weather_data_fetching(self) -> None:
         self.weather_data_input_df: pd.DataFrame = self.get_main_data()[[self.STATION_COLNAME, self.DATE_COLNAME]].drop_duplicates()
