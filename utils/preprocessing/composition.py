@@ -1,7 +1,7 @@
 import pandas as pd
 import geopandas as gpd
 from pathlib import Path
-from shapely.geometry import Point
+from shapely.geometry import Point, LineString
 from typing import Callable
 from .raw_data import TrainDelaysRawDataHandler
 from ..fetching.geocoding import GoogleMapsGeocoder
@@ -14,6 +14,7 @@ class SaveMethodSelector:
     FILE_ENCODING: str = 'utf-8'
     CRS: str = 'EPSG:4326'
     SOURCE_GEOM_COLNAMES: list[str] = ['lat', 'lon',]
+    SOURCE_SINGLE_GEOM_COLNAME: str = 'decoded_polyline'
     DEST_GEOM_COLNAME: str = 'geometry'
 
     def __init__(self, data_type: str):
@@ -49,11 +50,17 @@ class SaveMethodSelector:
         print("Saving in SHP format")
 
     def __convert_df_to_geodf(self, input_df: pd.DataFrame) -> gpd.GeoDataFrame:
-        if not all(col in input_df.columns for col in self.SOURCE_GEOM_COLNAMES):
-            raise ValueError(f"Missing required columns {self.SOURCE_GEOM_COLNAMES} in DataFrame.")
         df = input_df.copy()
-        df[self.DEST_GEOM_COLNAME] = df.apply(lambda row: Point(row[self.SOURCE_GEOM_COLNAMES[1]], row[self.SOURCE_GEOM_COLNAMES[0]]), axis=1)
-        return gpd.GeoDataFrame(df, geometry = self.DEST_GEOM_COLNAME, crs = self.CRS).drop(self.SOURCE_GEOM_COLNAMES, axis=1)
+        geom_transformations = {
+            tuple(self.SOURCE_GEOM_COLNAMES): lambda row: Point(row[self.SOURCE_GEOM_COLNAMES[1]], row[self.SOURCE_GEOM_COLNAMES[0]]),
+            ("decoded_polyline",): lambda row: LineString(row["decoded_polyline"])
+        }
+        key = next((k for k in geom_transformations if set(k).issubset(df.columns)), None)
+        if not key:
+            raise ValueError(f"Missing required geometry columns: {self.SOURCE_GEOM_COLNAMES} or {self.SOURCE_SINGLE_GEOM_COLNAME} in DataFrame.")
+        
+        df[self.DEST_GEOM_COLNAME] = df.apply(geom_transformations[key], axis=1)
+        return gpd.GeoDataFrame(df, geometry=self.DEST_GEOM_COLNAME, crs=self.CRS).drop(columns=list(key))
 
     def save(self, format_type: str, input_data: pd.DataFrame, filepath: str, filename: str):
         methods = self.save_method_caller.get(format_type)
