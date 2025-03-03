@@ -53,7 +53,7 @@ class SaveMethodSelector:
         df = input_df.copy()
         geom_transformations = {
             tuple(self.SOURCE_GEOM_COLNAMES): lambda row: Point(row[self.SOURCE_GEOM_COLNAMES[1]], row[self.SOURCE_GEOM_COLNAMES[0]]),
-            ("decoded_polyline",): lambda row: LineString(row["decoded_polyline"])
+            (self.SOURCE_SINGLE_GEOM_COLNAME,): lambda row: LineString(row[self.SOURCE_SINGLE_GEOM_COLNAME])
         }
         key = next((k for k in geom_transformations if set(k).issubset(df.columns)), None)
         if not key:
@@ -86,6 +86,7 @@ class DataComposer(TrainDelaysRawDataHandler):
     def __init__(self, filename, out_filename, 
                  station_df_out_filename: str,
                  weather_df_out_filename: str, 
+                 routes_df_out_filename: str, 
                  autosave = True, 
                  geocoding_method: str = 'google') -> None:
         super().__init__(filename, out_filename, autosave)
@@ -96,6 +97,7 @@ class DataComposer(TrainDelaysRawDataHandler):
 
         self.station_df_out_filename = station_df_out_filename
         self.weather_df_out_filename = weather_df_out_filename
+        self.routes_df_out_filename = routes_df_out_filename
         self.station_names: list[str] = None
         self.stations_df: pd.DataFrame = None
         self.weather_data_input_df: pd.DataFrame = None
@@ -162,7 +164,9 @@ class DataComposer(TrainDelaysRawDataHandler):
                 self.gm_routes_service.get_route(start_lat, start_lon, dest_lat, dest_lon)
 
         self.routes_df = self.gm_routes_service.get_routes_data()
-        print(self.routes_df)
+
+        if self.autosave:
+            self.save_method_selector.save(save_format, self.routes_df, self.PREPROCESSED_DATA_DIR, self.routes_df_out_filename)
     
     def __prepare_input_for_weather_data_fetching(self) -> None:
         self.weather_data_input_df: pd.DataFrame = self.get_main_data()[[self.STATION_COLNAME, self.DATE_COLNAME]].drop_duplicates()
@@ -178,7 +182,7 @@ class DataComposer(TrainDelaysRawDataHandler):
         train_delays_data = train_delays_data.explode(self.STATION_COLNAME)[[self.KEY_COLNAME, self.RELATION_COLNAME, self.STATION_COLNAME]].drop_duplicates().reset_index(drop=True)
 
         if self.DEBUG:
-            loaded_stations_df = pd.read_parquet('data/preprocessed/stations.parquet')
+            loaded_stations_df = pd.read_parquet('data/temp/ok_data/stations.parquet')
             self.routes_data_input_df = train_delays_data.merge(loaded_stations_df, how = self.JOIN_TYPE, on = self.STATION_COLNAME)
         else:
             self.routes_data_input_df = train_delays_data.merge(self.stations_df, how = self.JOIN_TYPE, on = self.STATION_COLNAME)
