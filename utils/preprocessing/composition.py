@@ -6,6 +6,7 @@ from typing import Callable
 from .raw_data import TrainDelaysRawDataHandler
 from ..fetching.geocoding import GoogleMapsGeocoder
 from ..fetching.weather import WeatherDataFetcher
+from ..fetching.routes import GoogleMapsRouteFetcher
 
 FetchingMethodSelector = dict[str, Callable]
 
@@ -25,7 +26,7 @@ class SaveMethodSelector:
         }
 
         self.data_type: str = data_type.lower()
-        if self.data_type not in ('stations', 'weather',):
+        if self.data_type not in ('stations', 'weather', 'routes',):
             raise ValueError(f'Only stations ans weather data types are supported.')
 
     def __save_data_csv(self, input_data: pd.DataFrame, filepath:str, filename: str):
@@ -64,6 +65,11 @@ class SaveMethodSelector:
 
 class DataComposer(TrainDelaysRawDataHandler):
     STATION_COLNAME: str = 'stacja'
+    RELATION_COLNAME: str = 'relacja'
+    ID_COLNAME: str = 'id'
+    KEY_COLNAME: str = 'key'
+    TRANSFORM_HELPER_COLNAME: str = 'full_route_station_count'
+    TRANSFORM_AGG_METHOD: str = 'count'
     LAT_COLNAME: str = 'lat'
     LON_COLNAME: str = 'lon'
     DATE_COLNAME: str = 'data'
@@ -86,9 +92,12 @@ class DataComposer(TrainDelaysRawDataHandler):
         self.station_names: list[str] = None
         self.stations_df: pd.DataFrame = None
         self.weather_data_input_df: pd.DataFrame = None
+        self.routes_data_input_df: pd.DataFrame = None
         self.weather_df: pd.DataFrame = None
+        self.routes_df: pd.DataFrame = None
         self.gm_geocoding_service = GoogleMapsGeocoder()
         self.weather_data_service = WeatherDataFetcher()
+        self.gm_routes_service = GoogleMapsRouteFetcher()
         self.save_method_selector = None
 
         self.fetching_stations_data_method_caller: FetchingMethodSelector = {
@@ -96,9 +105,10 @@ class DataComposer(TrainDelaysRawDataHandler):
             'osm': 'placeholder',
         }
 
-    def run_composing(self, stations_data_save_format: str, weather_data_save_format: str):
+    def run_composing(self, stations_data_save_format: str, weather_data_save_format: str, routes_data_save_format: str):
         self.__compose_stations_data(stations_data_save_format)
         self.__compose_weather_data(weather_data_save_format)
+        self.__compose_routes_data(routes_data_save_format)
 
     def __compose_stations_data(self, save_format: str):
         self.save_method_selector = SaveMethodSelector('stations')
@@ -106,7 +116,7 @@ class DataComposer(TrainDelaysRawDataHandler):
 
         if self.DEBUG:
             self.stations_df = pd.DataFrame(self.fetching_stations_data_method_caller[self.__geocoding_method](self.station_names[:2]))
-            print(self.stations_df)
+            # print(self.stations_df)
         else:
             self.stations_df = pd.DataFrame(self.fetching_stations_data_method_caller[self.__geocoding_method](self.station_names))
 
@@ -119,17 +129,56 @@ class DataComposer(TrainDelaysRawDataHandler):
 
         if self.DEBUG:
             self.weather_df = self.weather_data_service.batch_fetch_weather(self.weather_data_input_df.iloc[:2])
-            print(self.weather_df)
+            # print(self.weather_df)
         else:
             self.weather_df = self.weather_data_service.batch_fetch_weather(self.weather_data_input_df.iloc)
 
         if self.autosave:
             self.save_method_selector.save(save_format, self.weather_df, self.PREPROCESSED_DATA_DIR, self.weather_df_out_filename)
+
+    def __compose_routes_data(self, save_format: str):
+        self.save_method_selector = SaveMethodSelector('routes')
+        self.__prepare_input_for_routes_data_fetching()
+
+        if self.DEBUG:
+            self.routes_data_input_df = self.routes_data_input_df.iloc[:2]
+            
+        grouped_df = self.routes_data_input_df.groupby(self.KEY_COLNAME)
+        for _, df in grouped_df:
+            temp_df = df.copy().reset_index(drop=True)
+
+            max_indice: int = temp_df.index.max() + 1
+            for i in range(1, max_indice):
+                current_station = temp_df.iloc[i]
+                previous_station = temp_df.iloc[i - 1]
+                start_lat, start_lon, dest_lat, dest_lon = previous_station[self.LAT_COLNAME], previous_station[self.LON_COLNAME], current_station[self.LAT_COLNAME], current_station[self.LON_COLNAME]
+                self.gm_routes_service.get_route(start_lat, start_lon, dest_lat, dest_lon)
+
+        self.routes_df = self.gm_routes_service.get_routes_data()
+        print(self.routes_df)
     
     def __prepare_input_for_weather_data_fetching(self) -> None:
         self.weather_data_input_df: pd.DataFrame = self.get_main_data()[[self.STATION_COLNAME, self.DATE_COLNAME]].drop_duplicates()
         self.weather_data_input_df = self.weather_data_input_df.merge(self.stations_df, how=self.JOIN_TYPE, on=self.STATION_COLNAME)
         self.weather_data_input_df[self.DATE_COLNAME] = pd.to_datetime(self.weather_data_input_df[self.DATE_COLNAME], format='%d.%m.%Y')
+
+    def __prepare_input_for_routes_data_fetching(self) -> None:
+        train_delays_data = self.get_main_data()
+        train_delays_data[self.TRANSFORM_HELPER_COLNAME] = train_delays_data.groupby([self.ID_COLNAME, self.RELATION_COLNAME])[self.RELATION_COLNAME].transform(self.TRANSFORM_AGG_METHOD)
+        train_delays_data = train_delays_data.drop_duplicates(subset=[self.ID_COLNAME, self.RELATION_COLNAME, self.STATION_COLNAME])
+        train_delays_data = train_delays_data.groupby([self.RELATION_COLNAME, self.TRANSFORM_HELPER_COLNAME])[self.STATION_COLNAME].agg(self._unique_list_preserve_order).reset_index()
+        train_delays_data[self.KEY_COLNAME] = train_delays_data[self.RELATION_COLNAME].astype(str) + '_' + train_delays_data[self.STATION_COLNAME].astype(str)
+        train_delays_data = train_delays_data.explode(self.STATION_COLNAME)[[self.KEY_COLNAME, self.RELATION_COLNAME, self.STATION_COLNAME]].drop_duplicates().reset_index(drop=True)
+
+        if self.DEBUG:
+            loaded_stations_df = pd.read_parquet('data/preprocessed/stations.parquet')
+            self.routes_data_input_df = train_delays_data.merge(loaded_stations_df, how = self.JOIN_TYPE, on = self.STATION_COLNAME)
+        else:
+            self.routes_data_input_df = train_delays_data.merge(self.stations_df, how = self.JOIN_TYPE, on = self.STATION_COLNAME)
+
+    @staticmethod
+    def _unique_list_preserve_order(input_array: list) -> list:
+        return list(dict.fromkeys(input_array))
 
     def get_main_data(self) -> pd.DataFrame:
         return super().get_merged_data()
