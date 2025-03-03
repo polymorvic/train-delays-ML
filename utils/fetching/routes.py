@@ -1,7 +1,8 @@
 import requests, os
 import pandas as pd
+import numpy as np
 from polyline import decode
-from haversine import haversine
+from haversine import haversine, Unit
 from typing import Optional
 from .models.google_maps_routes_response import Route, RouteResponse
 
@@ -11,7 +12,7 @@ class GoogleMapsRouteFetcher(requests.Session):
         "Content-Type": "application/json",
         "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline"
     }
-    DATA_DICT_KEYS: list = ['start_lat', 'start_lon', 'dest_lat', 'dest_lon', 'distance_m', 'duration', 'encoded_polyline_str', 'decoded_polyline',]
+    DATA_DICT_KEYS: list = ['start_lat', 'start_lon', 'dest_lat', 'dest_lon', 'distance_m', 'duration_s', 'encoded_polyline_str', 'decoded_polyline',]
     
     def __init__(self):
         super().__init__()
@@ -48,6 +49,12 @@ class GoogleMapsRouteFetcher(requests.Session):
             print(f"Parsing error: {e}")
             return None
         
+    def __handle_missing_data(self, start_lat: float, start_lon: float, dest_lat: float, dest_lon: float) -> tuple[float, list[tuple[float, float]]]:
+        point_start, points_dest = (start_lat, start_lon,), (dest_lat, dest_lon,)
+        distance_m: float = haversine(point_start, points_dest, unit=Unit.METERS)
+        quasi_decoded_polyline: list[tuple[float, float]] = self._generate_intermediate_points(point_start, points_dest)
+        return distance_m, quasi_decoded_polyline
+
     def get_route(self, start_lat: float, start_lon: float, dest_lat: float, dest_lon: float) -> None:
         route = self.__fetch_route(start_lat, start_lon, dest_lat, dest_lon)
         if route:
@@ -59,7 +66,8 @@ class GoogleMapsRouteFetcher(requests.Session):
             values = [start_lat, start_lon, dest_lat, dest_lon, original_route_distance_m, route_duration_s, original_route_encoded_polyline_str, decoded_polyline]
 
         else:
-            values = [None] * len(self.DATA_DICT_KEYS)
+            distance_m, quasi_decoded_polyline = self.__handle_missing_data(start_lat, start_lon, dest_lat, dest_lon)
+            values = [start_lat, start_lon, dest_lat, dest_lon, distance_m, None, None, quasi_decoded_polyline]
 
         for key, value in zip(self.DATA_DICT_KEYS, values):
             self.__data_dict[key].append(value)
@@ -76,3 +84,11 @@ class GoogleMapsRouteFetcher(requests.Session):
         route_duration_s: float  = float(duration.replace('s', ''))
         decoded_polyline: list[tuple[float, float]] = GoogleMapsRouteFetcher._polyline_decoder(polyline) 
         return route_duration_s, decoded_polyline
+    
+    @staticmethod
+    def _generate_intermediate_points(point_start: tuple[float, float], point_dest: tuple[float, float], num_points: int = 25) -> list[tuple[float, float]]:
+        lat1, lon1 = point_start
+        lat2, lon2 = point_dest
+        lats = np.linspace(lat1, lat2, num_points + 2, dtype=float)
+        lons = np.linspace(lon1, lon2, num_points + 2, dtype=float)
+        return [(float(lat), float(lon)) for lat, lon in zip(lats, lons)]
