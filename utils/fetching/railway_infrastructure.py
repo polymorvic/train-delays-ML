@@ -74,15 +74,3 @@ def convert_to_geometry(row):
 
 def create_small_polygon(points_series: gpd.GeoSeries, distance: float) -> gpd.GeoSeries:
     return points_series.apply(lambda point: point.buffer(distance))
-
-def measure_linestring_distance_inside_polygon(routes_list: list, polygon):
-    intersection_lin_str = []
-    for route in routes_list:
-        inter = route.intersection(polygon)
-        intersection_lin_str.append(inter)
-        
-    route_gdf = gpd.GeoDataFrame(geometry=intersection_lin_str)
-    route_gdf.crs = "EPSG:4326"
-    route_gdf_projected = route_gdf.to_crs("EPSG:32610")
-    total_distance_km = route_gdf_projected.geometry.length.sum() / 1000
-    return total_distance_km

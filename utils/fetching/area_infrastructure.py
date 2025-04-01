@@ -35,3 +35,15 @@ class AreaRailwayInfrastructureService:
             return self.powiaty_gdf
         else:
             raise ValueError(f"Unsupported area type: {area_type}")
+        
+def measure_linestring_distance_inside_polygon(routes_list: list, polygon):
+    intersection_lin_str = []
+    for route in routes_list:
+        inter = route.intersection(polygon)
+        intersection_lin_str.append(inter)
+        
+    route_gdf = gpd.GeoDataFrame(geometry=intersection_lin_str)
+    route_gdf.crs = "EPSG:4326"
+    route_gdf_projected = route_gdf.to_crs("EPSG:32610")
+    total_distance_km = route_gdf_projected.geometry.length.sum() / 1000
+    return total_distance_km
