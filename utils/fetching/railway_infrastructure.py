@@ -9,6 +9,11 @@ class OSMDataLoader(ABC):
         self.polygon_path = polygon_path
         self.polygon = None
         self.railway_features = None
+        self._configure_osmnx()
+
+    def _configure_osmnx(self):
+        """Prevent OSMNX cache folder creation."""
+        ox.settings.use_cache = False
 
     def load_polygon(self):
         """Load polygon geometry from shapefile."""
