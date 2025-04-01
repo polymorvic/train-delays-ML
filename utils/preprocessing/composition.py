@@ -7,6 +7,7 @@ from .raw_data import TrainDelaysRawDataHandler
 from ..fetching.geocoding import GoogleMapsGeocoder
 from ..fetching.weather import WeatherDataFetcher
 from ..fetching.routes import GoogleMapsRouteFetcher
+from ..fetching.railway_infrastructure import RailwayDataService, convert_to_geometry, create_small_polygon
 
 FetchingMethodSelector = dict[str, Callable]
 
@@ -73,6 +74,8 @@ class SaveMethodSelector:
 class DataComposer(TrainDelaysRawDataHandler):
     STATION_COLNAME: str = 'stacja'
     RELATION_COLNAME: str = 'relacja'
+    GEOMETRY_COLNAME: str = 'geometry'
+    DECODED_POLYLINES_COLNAME: str = 'decoded_polylines'
     ID_COLNAME: str = 'id'
     KEY_COLNAME: str = 'key'
     TRANSFORM_HELPER_COLNAME: str = 'full_route_station_count'
@@ -81,6 +84,8 @@ class DataComposer(TrainDelaysRawDataHandler):
     LON_COLNAME: str = 'lon'
     DATE_COLNAME: str = 'data'
     JOIN_TYPE: str = 'left'
+    COUNTRY_BORDERS_SPATIAL_FILEPATH: str = 'data/external_data/borders/country/A00_Granice_panstwa.shp'
+    BUFFER_SIZE: float = 0.00001
     DEBUG: bool = True
 
     def __init__(self, filename, out_filename, 
@@ -104,9 +109,12 @@ class DataComposer(TrainDelaysRawDataHandler):
         self.routes_data_input_df: pd.DataFrame = None
         self.weather_df: pd.DataFrame = None
         self.routes_df: pd.DataFrame = None
+        self.level_crossings_gs: gpd.GeoSeries = None
+        self.switches_gs: gpd.GeoSeries = None
         self.gm_geocoding_service = GoogleMapsGeocoder()
         self.weather_data_service = WeatherDataFetcher()
         self.gm_routes_service = GoogleMapsRouteFetcher()
+        self.railway_data_service = RailwayDataService(self.COUNTRY_BORDERS_SPATIAL_FILEPATH)
         self.save_method_selector = None
 
         self.fetching_stations_data_method_caller: FetchingMethodSelector = {
@@ -114,10 +122,14 @@ class DataComposer(TrainDelaysRawDataHandler):
             'osm': 'placeholder',
         }
 
-    def run_composing(self, stations_data_save_format: str, weather_data_save_format: str, routes_data_save_format: str):
+    def run_composing(self, stations_data_save_format: str, 
+                      weather_data_save_format: str, 
+                      routes_data_save_format: str, 
+                      railway_infrastructure_data_save_format: str):
         self.__compose_stations_data(stations_data_save_format)
         self.__compose_weather_data(weather_data_save_format)
         self.__compose_routes_data(routes_data_save_format)
+        self.__compose_railway_infrastructure_data(railway_infrastructure_data_save_format)
 
     def __compose_stations_data(self, save_format: str):
         self.save_method_selector = SaveMethodSelector('stations')
@@ -167,6 +179,20 @@ class DataComposer(TrainDelaysRawDataHandler):
 
         if self.autosave:
             self.save_method_selector.save(save_format, self.routes_df, self.PREPROCESSED_DATA_DIR, self.routes_df_out_filename)
+
+    def __compose_railway_infrastructure_data(self, save_format: str): 
+        self.level_crossings_gs = self.railway_data_service.get_level_crossings()
+        self.switches_gs = self.railway_data_service.get_switches()
+
+        self.__modify_railway_infrastructure_data(self.BUFFER_SIZE)
+
+        self.routes_df[['level_crossing_count', 'switches_count']] = self.routes_df[self.GEOMETRY_COLNAME].apply(
+            lambda route: pd.Series(self.__count_railway_infrastructure_intersections(route))
+            )
+
+        if self.autosave:
+            self.save_method_selector = SaveMethodSelector('railway_level_crossings')
+            self.save_method_selector.save(save_format, self.level_crossings_gs.to_frame(name='geometry'), self.PREPROCESSED_DATA_DIR, 'routes_data_infrastructure')
     
     def __prepare_input_for_weather_data_fetching(self) -> None:
         self.weather_data_input_df: pd.DataFrame = self.get_main_data()[[self.STATION_COLNAME, self.DATE_COLNAME]].drop_duplicates()
@@ -187,6 +213,34 @@ class DataComposer(TrainDelaysRawDataHandler):
         else:
             self.routes_data_input_df = train_delays_data.merge(self.stations_df, how = self.JOIN_TYPE, on = self.STATION_COLNAME)
 
+    def __modify_railway_infrastructure_data(self, buffer_size: float) -> None:
+        self.routes_df[self.GEOMETRY_COLNAME] = self.routes_df[self.DECODED_POLYLINES_COLNAME].apply(convert_to_geometry)
+        self.level_crossings_gs = create_small_polygon(self.switches_gs, buffer_size)
+        self.switches_gs = create_small_polygon(self.switches_gs, buffer_size)
+
+    def __count_railway_infrastructure_intersections(self, route):
+
+        if isinstance(route, Point):
+            return -1, -1
+
+        if isinstance(route, LineString):
+            if not hasattr(self, '_lvl_crossing_sindex'):
+                self._lvl_crossing_sindex = self.level_crossings_gs.sindex
+            if not hasattr(self, '_switches_sindex'):
+                self._switches_sindex = self.switches_gs.sindex
+
+            possible_lvl_crossing_idx = list(self._lvl_crossing_sindex.query(route.bounds))
+            possible_lvl_crossing = self.level_crossings_gs.iloc[possible_lvl_crossing_idx]
+            lvl_crossing_count = possible_lvl_crossing.apply(route.intersects).sum()
+
+            possible_switches_idx = list(self._switches_sindex.query(route.bounds))
+            possible_switches = self.switches_gs.iloc[possible_switches_idx]
+            switches_count = possible_switches.apply(route.intersects).sum()
+
+            return lvl_crossing_count, switches_count
+
+        return -1, -1
+        
     @staticmethod
     def _unique_list_preserve_order(input_array: list) -> list:
         return list(dict.fromkeys(input_array))
