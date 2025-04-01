@@ -1,49 +1,75 @@
 import pandas as pd
 import geopandas as gpd
 import osmnx as ox
-from shapely.geometry import Polygon
 
 
 class AreaRailwayInfrastructureService:
+    ENCODING: str = 'utf-8'
+    CRS: str = 'EPSG:4326'
+    JOIN_TYPE: str = 'left'
+    SJOIN_PREDICATE_TYPE: str = 'predicate'
+    SELECTED_COLS: list[str] = ['geometry', 'JPT_NAZWA_', 'JPT_KOD_JE']
+    ID_VOIVODESHIP_COL: str = 'id_wojewodztwo'
+    ID_COUNTY_COL: str = 'id_powiat'
+    ID_DISTRICT_COL: str = 'id_gmina'
+    NAME_VOIVODESHIP_COL: str = 'nazwa_wojewodztwo'
+    NAME_COUNTY_COL: str = 'nazwa_powiat'
+    NAME_DISTRICT_COL: str = 'nazwa_gmina'
+    GEOMETRY_COLNAME: str = 'geometry'
+    STATION_COLNAME: str = 'stacja'
+    WITHIN_NEW_COLNAME: str = 'in_poland'
+    INDEX_RIGHT_COLNAME: str = 'index_right'
+    BORDERS_SPATIAL_DATA_DIR: str = 'data/external_data/borders'
 
-    def __init__(self, gminy_path: str, powiaty_path: str):
-        self.gminy_path = gminy_path
-        self.powiaty_path = powiaty_path
+    def __init__(self, districts_filename: str, counties_filename: str, voivodeships_filename: str, country_borders_filename: str, stations_gdf: gpd.GeoDataFrame, delays_data_df: pd.DataFrame):
+        self.districts_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{districts_filename}.shp'
+        self.counties_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{counties_filename}.shp'
+        self.voivodeships_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{voivodeships_filename}.shp'
+        self.country_borders_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{country_borders_filename}.shp'
+        self.delays_data_df: pd.DataFrame = delays_data_df
+        self.stations_gdf: gpd.GeoDataFrame = stations_gdf
+        self.country_borders_gdf: gpd.GeoDataFrame = None
+        self.voivodeships_borders_gdf: gpd.GeoDataFrame = None
+        self.counties_borders_gdf: gpd.GeoDataFrame = None
+        self.districts_borders_gdf: gpd.GeoDataFrame = None
 
-        self.gminy_gdf = gpd.read_file(self.gminy_path)
-        self.powiaty_gdf = gpd.read_file(self.powiaty_path)
+    def prepare_joined_station_area_data(self) -> gpd.GeoDataFrame:
+        self._load_spatial_layers()
+        stations_gps_df = self._prepare_stations_gps()
+        stations_gps_df = self._flag_stations_in_poland(stations_gps_df)
+        enriched_stations = self._spatial_join_areas(stations_gps_df)
+        return enriched_stations
 
-    def get_area_codes(self) -> tuple[pd.Series, pd.Series]:
-        gminy_codes = self.gminy_gdf['JPT_KOD_JE'].unique()
-        powiaty_codes = self.powiaty_gdf['JPT_KOD_JE'].unique()
-        return gminy_codes, powiaty_codes
+    def _load_spatial_layers(self):
+        self.poland_borders = gpd.read_file(self.country_borders_gdf, encoding = self.ENCODING).to_crs(self.CRS)
+        self.wojewodztwa = gpd.read_file(self.voivodeships_borders_gdf, encoding = self.ENCODING).to_crs(self.CRS)
+        self.powiaty = gpd.read_file(self.counties_borders_gdf, encoding = self.ENCODING).to_crs(self.CRS)
+        self.gminy = gpd.read_file(self.districts_borders_gdf, encoding = self.ENCODING).to_crs(self.CRS)
 
-    def get_area_polygon(self, area_type: str, code: str) -> Polygon:
-        if area_type == 'gmina':
-            area_gdf = self.gminy_gdf
-        elif area_type == 'powiat':
-            area_gdf = self.powiaty_gdf
-        else:
-            raise ValueError(f"Unsupported area type: {area_type}")
+    def _prepare_stations_gps(self) -> gpd.GeoDataFrame:
+        merged = pd.merge(self.delays_data_df, self.stations_gdf, on=self.STATION_COLNAME, how=self.JOIN_TYPE)
+        stations_gps_df = merged[[self.STATION_COLNAME, self.GEOMETRY_COLNAME]].drop_duplicates().reset_index(drop=True)
+        return gpd.GeoDataFrame(stations_gps_df, geometry=self.GEOMETRY_COLNAME, crs=self.CRS)
 
-        return area_gdf.loc[area_gdf['JPT_KOD_JE'] == code, 'geometry'].item()
+    def _flag_stations_in_poland(self, stations_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        stations_df[self.WITHIN_NEW_COLNAME] = stations_df.within(self.poland_borders.unary_union)
+        return stations_df
 
-    def get_area_dataframe(self, area_type: str) -> gpd.GeoDataFrame:
-        if area_type == 'gmina':
-            return self.gminy_gdf
-        elif area_type == 'powiat':
-            return self.powiaty_gdf
-        else:
-            raise ValueError(f"Unsupported area type: {area_type}")
-        
-def measure_linestring_distance_inside_polygon(routes_list: list, polygon):
-    intersection_lin_str = []
-    for route in routes_list:
-        inter = route.intersection(polygon)
-        intersection_lin_str.append(inter)
-        
-    route_gdf = gpd.GeoDataFrame(geometry=intersection_lin_str)
-    route_gdf.crs = "EPSG:4326"
-    route_gdf_projected = route_gdf.to_crs("EPSG:32610")
-    total_distance_km = route_gdf_projected.geometry.length.sum() / 1000
-    return total_distance_km
+    def _spatial_join_areas(self, stations_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        join_layers = [
+            (self.wojewodztwa[self.SELECTED_COLS], self.ID_VOIVODESHIP_COL, self.NAME_VOIVODESHIP_COL),
+            (self.powiaty[self.SELECTED_COLS], self.ID_COUNTY_COL, self.NAME_COUNTY_COL),
+            (self.gminy[self.SELECTED_COLS], self.ID_DISTRICT_COL, self.NAME_DISTRICT_COL),
+        ]
+
+        enriched = stations_df.copy()
+        for layer, id_col, name_col in join_layers:
+            enriched = gpd.sjoin(
+                enriched,
+                layer,
+                how = self.JOIN_TYPE,
+                predicate = self.SJOIN_PREDICATE_TYPE
+            ).drop(columns=[self.INDEX_RIGHT_COLNAME])
+            enriched.rename(columns={self.SELECTED_COLS[-1]: id_col, self.SELECTED_COLS[1]: name_col}, inplace=True)
+
+        return enriched
