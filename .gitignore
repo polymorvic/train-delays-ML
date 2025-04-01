@@ -11,3 +11,4 @@ __pycache__
 *.csv
 *.xlsx
 .DS_Store
+*.drawio
