@@ -1,6 +1,7 @@
 import geopandas as gpd
 import osmnx as ox
 from abc import ABC, abstractmethod
+from shapely.geometry import Point, LineString
 
 class OSMDataLoader(ABC):
     """Abstract base class to load railway data from OSM using a polygon."""
@@ -64,3 +65,12 @@ class RailwayDataService(OSMDataLoader, RailwayFilterMixin):
         if self.railway_features is None:
             self.load_data()
         return self.filter_switches(self.railway_features)
+    
+def convert_to_geometry(row):
+    coords = row["decoded_polylines"]
+    if not coords:
+        return None 
+    return Point(coords[0]) if len(coords) == 1 else LineString(coords)
+
+def create_small_polygon(points_series: gpd.GeoSeries, distance: float) -> gpd.GeoSeries:
+    return points_series.apply(lambda point: point.buffer(distance))
