@@ -23,9 +23,9 @@ class AreaRailwayInfrastructureService:
 
     def __init__(self, districts_filename: str, counties_filename: str, voivodeships_filename: str, country_borders_filename: str, stations_gdf: gpd.GeoDataFrame, delays_data_df: pd.DataFrame):
         self.districts_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{districts_filename}.shp'
-        self.counties_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{counties_filename}.shp'
-        self.voivodeships_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{voivodeships_filename}.shp'
-        self.country_borders_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{country_borders_filename}.shp'
+        self.counties_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/counties/{counties_filename}.shp'
+        self.voivodeships_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/voivodeships/{voivodeships_filename}.shp'
+        self.country_borders_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/country/{country_borders_filename}.shp'
         self.delays_data_df: pd.DataFrame = delays_data_df
         self.stations_gdf: gpd.GeoDataFrame = stations_gdf
         self.country_borders_gdf: gpd.GeoDataFrame = None
