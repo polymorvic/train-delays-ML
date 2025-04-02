@@ -1,6 +1,5 @@
 import pandas as pd
 import geopandas as gpd
-import osmnx as ox
 
 
 class AreaRailwayInfrastructureService:
@@ -73,3 +72,15 @@ class AreaRailwayInfrastructureService:
             enriched.rename(columns={self.SELECTED_COLS[-1]: id_col, self.SELECTED_COLS[1]: name_col}, inplace=True)
 
         return enriched
+    
+def measure_linestring_distance_inside_polygon(routes_list:List, polygon):
+    intersection_lin_str = []
+    for route in routes_list:
+        inter = route.intersection(polygon)
+        intersection_lin_str.append(inter)
+        
+    route_gdf = gpd.GeoDataFrame(geometry=intersection_lin_str)
+    route_gdf.crs = "EPSG:4326"
+    route_gdf_projected = route_gdf.to_crs("EPSG:32610")
+    total_distance_km = route_gdf_projected.geometry.length.sum() / 1000
+    return total_distance_km
