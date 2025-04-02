@@ -20,19 +20,21 @@ class AreaRailwayInfrastructureService:
     INDEX_RIGHT_COLNAME: str = 'index_right'
     BORDERS_SPATIAL_DATA_DIR: str = 'data/external_data/borders'
 
-    def __init__(self, districts_filename: str, counties_filename: str, voivodeships_filename: str, country_borders_filename: str, stations_gdf: gpd.GeoDataFrame, delays_data_df: pd.DataFrame):
+    def __init__(self, districts_filename: str, counties_filename: str, voivodeships_filename: str, country_borders_filename: str):
         self.districts_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/districts/{districts_filename}.shp'
         self.counties_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/counties/{counties_filename}.shp'
         self.voivodeships_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/voivodeships/{voivodeships_filename}.shp'
         self.country_borders_path: str = f'{self.BORDERS_SPATIAL_DATA_DIR}/country/{country_borders_filename}.shp'
-        self.delays_data_df: pd.DataFrame = delays_data_df
-        self.stations_gdf: gpd.GeoDataFrame = stations_gdf
+        self.delays_data_df: pd.DataFrame = None
+        self.stations_gdf: gpd.GeoDataFrame = None
         self.country_borders_gdf: gpd.GeoDataFrame = None
         self.voivodeships_borders_gdf: gpd.GeoDataFrame = None
         self.counties_borders_gdf: gpd.GeoDataFrame = None
         self.districts_borders_gdf: gpd.GeoDataFrame = None
 
-    def prepare_joined_station_area_data(self) -> gpd.GeoDataFrame:
+    def prepare_joined_station_area_data(self, stations_gdf: gpd.GeoDataFrame, delays_data_df: pd.DataFrame) -> gpd.GeoDataFrame:
+        self.delays_data_df = delays_data_df
+        self.stations_gdf = stations_gdf
         self._load_spatial_layers()
         stations_gps_df = self._prepare_stations_gps()
         stations_gps_df = self._flag_stations_in_poland(stations_gps_df)
