@@ -73,7 +73,7 @@ class AreaRailwayInfrastructureService:
 
         return enriched
     
-def measure_linestring_distance_inside_polygon(routes_list:List, polygon):
+def measure_linestring_distance_inside_polygon(routes_list: list, polygon):
     intersection_lin_str = []
     for route in routes_list:
         inter = route.intersection(polygon)
