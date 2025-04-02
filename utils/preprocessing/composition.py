@@ -1,5 +1,6 @@
 import pandas as pd
 import geopandas as gpd
+import osmnx as ox
 from pathlib import Path
 from shapely.geometry import Point, LineString
 from typing import Callable
@@ -8,6 +9,7 @@ from ..fetching.geocoding import GoogleMapsGeocoder
 from ..fetching.weather import WeatherDataFetcher
 from ..fetching.routes import GoogleMapsRouteFetcher
 from ..fetching.railway_infrastructure import RailwayDataService, convert_to_geometry, create_small_polygon
+from ..fetching.area_infrastructure import AreaRailwayInfrastructureService, measure_linestring_distance_inside_polygon
 
 FetchingMethodSelector = dict[str, Callable]
 
@@ -78,13 +80,23 @@ class DataComposer(TrainDelaysRawDataHandler):
     DECODED_POLYLINES_COLNAME: str = 'decoded_polylines'
     ID_COLNAME: str = 'id'
     KEY_COLNAME: str = 'key'
+    DISTRICT_ID_COLNAME: str = 'id_gmina'
+    DISTRICT_PREFIX_COLNAME: str = 'gmina'
+    COUNTY_ID_COLNAME: str = 'id_powiat'
+    COUNTY_PREFIX_COLNAME: str = 'powiat'
+    JPT_CODE_COLNAME: str = 'JPT_KOD_JE'
     TRANSFORM_HELPER_COLNAME: str = 'full_route_station_count'
     TRANSFORM_AGG_METHOD: str = 'count'
     LAT_COLNAME: str = 'lat'
     LON_COLNAME: str = 'lon'
     DATE_COLNAME: str = 'data'
     JOIN_TYPE: str = 'left'
-    COUNTRY_BORDERS_SPATIAL_FILEPATH: str = 'data/external_data/borders/country/A00_Granice_panstwa.shp'
+    DISTRICTS_FILENAME: str = 'gminy'
+    COUNTIES_FILENAME: str = 'powiaty'
+    VOIVODESHIPS_FILENAME: str = 'wojewodztwa'
+    COUNTRY_BORDERS_FILENAME: str = 'A00_Granice_panstwa'
+    BORDERS_SPATIAL_DATA_DIR: str = 'data/external_data/borders'
+    COUNTRY_BORDERS_SPATIAL_FILEPATH: str = f'{BORDERS_SPATIAL_DATA_DIR}/country/{COUNTRY_BORDERS_FILENAME}.shp'
     BUFFER_SIZE: float = 0.00001
     DEBUG: bool = True
 
@@ -111,10 +123,14 @@ class DataComposer(TrainDelaysRawDataHandler):
         self.routes_df: pd.DataFrame = None
         self.level_crossings_gs: gpd.GeoSeries = None
         self.switches_gs: gpd.GeoSeries = None
+        self.districts_df: pd.DataFrame = None
+        self.counties_df: pd.DataFrame = None
+        self.area_infrastructure_gdf: gpd.GeoDataFrame = None
         self.gm_geocoding_service = GoogleMapsGeocoder()
         self.weather_data_service = WeatherDataFetcher()
         self.gm_routes_service = GoogleMapsRouteFetcher()
         self.railway_data_service = RailwayDataService(self.COUNTRY_BORDERS_SPATIAL_FILEPATH)
+        self.area_infrastructure_service = AreaRailwayInfrastructureService(self.DISTRICTS_FILENAME, self.COUNTIES_FILENAME, self.VOIVODESHIPS_FILENAME, self.COUNTRY_BORDERS_FILENAME)
         self.save_method_selector = None
 
         self.fetching_stations_data_method_caller: FetchingMethodSelector = {
@@ -125,11 +141,13 @@ class DataComposer(TrainDelaysRawDataHandler):
     def run_composing(self, stations_data_save_format: str, 
                       weather_data_save_format: str, 
                       routes_data_save_format: str, 
-                      railway_infrastructure_data_save_format: str):
+                      railway_infrastructure_data_save_format: str,
+                      area_infrastructure_data_save_format: str):
         self.__compose_stations_data(stations_data_save_format)
         self.__compose_weather_data(weather_data_save_format)
         self.__compose_routes_data(routes_data_save_format)
         self.__compose_railway_infrastructure_data(railway_infrastructure_data_save_format)
+        self.__compose_area_infrastructure(area_infrastructure_data_save_format)
 
     def __compose_stations_data(self, save_format: str):
         self.save_method_selector = SaveMethodSelector('stations')
@@ -193,7 +211,36 @@ class DataComposer(TrainDelaysRawDataHandler):
         if self.autosave:
             self.save_method_selector = SaveMethodSelector('railway_level_crossings')
             self.save_method_selector.save(save_format, self.level_crossings_gs.to_frame(name='geometry'), self.PREPROCESSED_DATA_DIR, 'routes_data_infrastructure')
-    
+
+    def __compose_area_infrastructure(self, save_format: str):
+        self.save_method_selector = SaveMethodSelector('area_railway_infrastructure')
+        self.area_infrastructure_gdf, self.districts_df, self.counties_df = self.area_infrastructure_service.prepare_joined_station_area_data(self.stations_df, self.get_main_data())
+
+        districts_railway_data = self.__fetch_area_railway_data(
+            area_codes=self.area_infrastructure_gdf[self.DISTRICT_ID_COLNAME].dropna().unique(),
+            area_df=self.districts_df,
+            area_code_col=self.JPT_CODE_COLNAME,
+            area_id_col=self.DISTRICT_ID_COLNAME,
+            prefix=self.DISTRICT_PREFIX_COLNAME
+            )
+
+        counties_railway_data = self.__fetch_area_railway_data(
+            area_codes=self.area_infrastructure_gdf[self.COUNTY_ID_COLNAME].dropna().unique(),
+            area_df=self.counties_df,
+            area_code_col=self.JPT_CODE_COLNAME,
+            area_id_col=self.COUNTY_ID_COLNAME,
+            prefix=self.COUNTY_PREFIX_COLNAME
+        )
+
+        joined_df = (
+            self.area_infrastructure_gdf
+            .merge(districts_railway_data, how = self.JOIN_TYPE, on=self.DISTRICT_ID_COLNAME)
+            .merge(counties_railway_data, how = self.JOIN_TYPE, on=self.COUNTY_ID_COLNAME)
+        )
+
+        if self.autosave:
+            self.save_method_selector.save(save_format, joined_df, self.PREPROCESSED_DATA_DIR, 'area_railway_infrastructure')
+
     def __prepare_input_for_weather_data_fetching(self) -> None:
         self.weather_data_input_df: pd.DataFrame = self.get_main_data()[[self.STATION_COLNAME, self.DATE_COLNAME]].drop_duplicates()
         self.weather_data_input_df = self.weather_data_input_df.merge(self.stations_df, how=self.JOIN_TYPE, on=self.STATION_COLNAME)
@@ -240,6 +287,61 @@ class DataComposer(TrainDelaysRawDataHandler):
             return lvl_crossing_count, switches_count
 
         return -1, -1
+    
+    def __fetch_area_railway_data(self, area_codes, area_df, area_code_col, area_id_col, prefix):
+        results = {
+            area_id_col: [],
+            f'railway_distance_{prefix}': [],
+            f'stations_odometer_{prefix}': [],
+            f'level_crossing_odometer_{prefix}': [],
+            f'switches_odometer_{prefix}': [],
+        }
+
+        for code in area_codes:
+            try:
+                polygon = area_df.loc[area_df[area_code_col] == code, 'geometry'].item()
+                railway_features = ox.geometries_from_polygon(polygon, tags={'railway': True}).reset_index()
+
+                routes = railway_features[
+                    (railway_features['element_type'] == 'way')
+                    & (railway_features['railway'] == 'rail')
+                    & (~railway_features['ref'].isna())
+                ]['geometry'].tolist()
+
+                switches = railway_features[
+                    (railway_features['element_type'] == 'node')
+                    & (railway_features['railway'] == 'switch')
+                    & (~railway_features['ref'].isna())
+                ]['geometry'].tolist()
+
+                level_crossings = railway_features[
+                    (railway_features['element_type'] == 'node')
+                    & (railway_features['railway'] == 'level_crossing')
+                    & (~railway_features['ref'].isna())
+                ]['geometry'].tolist()
+
+                stations = railway_features[
+                    (railway_features['element_type'] == 'node')
+                    & (railway_features['railway'].isin(['station', 'halt']))
+                ]['geometry'].tolist()
+
+                total_distance = measure_linestring_distance_inside_polygon(routes, polygon)
+
+                results[area_id_col].append(code)
+                results[f'railway_distance_{prefix}'].append(total_distance)
+                results[f'stations_odometer_{prefix}'].append(len(stations))
+                results[f'level_crossing_odometer_{prefix}'].append(len(level_crossings))
+                results[f'switches_odometer_{prefix}'].append(len(switches))
+
+            except (KeyError, ValueError) as e:
+                print(f'[{prefix}] {code} - {e}')
+                results[area_id_col].append(code)
+                results[f'railway_distance_{prefix}'].append(-1)
+                results[f'stations_odometer_{prefix}'].append(-1)
+                results[f'level_crossing_odometer_{prefix}'].append(-1)
+                results[f'switches_odometer_{prefix}'].append(-1)
+
+        return pd.DataFrame(results)
         
     @staticmethod
     def _unique_list_preserve_order(input_array: list) -> list:
