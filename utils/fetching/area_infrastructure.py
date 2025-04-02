@@ -39,7 +39,7 @@ class AreaRailwayInfrastructureService:
         stations_gps_df = self._prepare_stations_gps()
         stations_gps_df = self._flag_stations_in_poland(stations_gps_df)
         enriched_stations = self._spatial_join_areas(stations_gps_df)
-        return enriched_stations
+        return enriched_stations, self.districts_borders_gdf, self.counties_borders_gdf
 
     def _load_spatial_layers(self):
         self.poland_borders = gpd.read_file(self.country_borders_gdf, encoding = self.ENCODING).to_crs(self.CRS)
