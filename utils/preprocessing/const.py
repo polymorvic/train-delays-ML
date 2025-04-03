@@ -16,3 +16,19 @@ MAIN_RAILWAY_STATIONS: list[str] = [
     'Olsztyn Główny',
     'Gdynia Główna',
     ]
+
+MODELING_READY_COLNAMES_BLACKLIST: list[str] = [
+    'lat',
+    'lon',
+    'key',
+    'prev_stations',
+    'next_stations',
+    'encoded_polylines',
+    'decoded_polylines',
+    'nazwa_wojewodztwo',
+    'id_wojewodztwo',
+    'nazwa_powiat',
+    'id_powiat',
+    'nazwa_gmina',
+    'id_gmina',
+    ]
