@@ -83,6 +83,7 @@ class DataAssembler:
         self.__merge_weather_data()
         self.__add_stop_duration_features()
         self.__apply_date_features()
+        self.__merge_area_railway_infrastructure()
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
@@ -158,6 +159,23 @@ class DataAssembler:
             df = self.fix_dates(df, col)
 
         df = self.add_date_features(df)
+
+        self.prepared_for_modeling_delays_df = df
+
+    def __merge_area_railway_infrastructure(self) -> None:
+        administrative_units = self.dataframes['area_railway']
+        df = self.prepared_for_modeling_delays_df.copy()
+
+        df = pd.merge(
+            df,
+            administrative_units,
+            how='left',
+            on=['stacja', 'lat', 'lon']
+        )
+
+        df[['id_gmina', 'id_powiat']] = (
+            df[['id_gmina', 'id_powiat']].fillna(-1).astype(int)
+        )
 
         self.prepared_for_modeling_delays_df = df
 
