@@ -74,12 +74,13 @@ class DataAssembler:
     def run_assembling(self) -> None:
 
         self.__prepare_raw_data_stations_merge()
+        self.__count_stations()
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
         stations_df = self.dataframes['stations']
 
-        self.prepared_delays_df = self.__prepare_raw_data(main_delays_df)
+        self.prepared_delays_df = self.prepare_raw_data(main_delays_df)
         self.prepared_delays_df = pd.merge(
             self.prepared_delays_df,
             stations_df,
@@ -87,8 +88,13 @@ class DataAssembler:
             how='left'
         )
 
+    def __count_stations(self) -> None:
+        data = self.prepared_delays_df
+        data['station_count_on_curr_station'] = data.groupby(['id', 'relacja']).cumcount()
+        data['full_route_station_count'] = data.groupby(['id', 'relacja'])['relacja'].transform('count')
+
     @staticmethod
-    def __prepare_raw_data(df: pd.DataFrame) -> pd.DataFrame:
+    def prepare_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
 
         df['przyjazd planowy'] = np.where(df['przyjazd planowy'].isnull(), df['odjazd planowy'], df['przyjazd planowy'])
@@ -147,6 +153,4 @@ class DataAssembler:
         df.drop(['data', 'przyjazd planowy', 'odjazd planowy', 'numer pociągu'], axis=1, inplace=True)
 
         return df
-
-
-        
+    
