@@ -75,6 +75,7 @@ class DataAssembler:
 
         self.__prepare_raw_data_stations_merge()
         self.__count_stations()
+        self.__merge_routes_data()
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
@@ -93,6 +94,44 @@ class DataAssembler:
         data['station_count_on_curr_station'] = data.groupby(['id', 'relacja']).cumcount()
         data['full_route_station_count'] = data.groupby(['id', 'relacja'])['relacja'].transform('count')
 
+    def __merge_routes_data(self) -> None:
+        data = self.prepared_delays_df.copy().reset_index(drop=True)
+        routes_data = self.dataframes['routes']
+
+        route_keys = self.__create_route_keys(data)
+        data = data.merge(route_keys[['id', 'relacja', 'key']], on=['id', 'relacja'], how='left')
+        data = self.__add_prev_next_stations(data)
+        merged_df = self.__filter_and_merge_routes(data, routes_data)
+
+        self.prepared_for_modeling_delays_df = merged_df
+
+
+    def __create_route_keys(self, data: pd.DataFrame) -> pd.DataFrame:
+        route_keys = (
+            data.groupby(['id', 'relacja'])['stacja']
+            .agg(self.unique_list_preserve_order)
+            .reset_index()
+        )
+        route_keys['key1'] = route_keys['relacja']
+        route_keys['key2'] = route_keys['stacja'].apply(lambda x: ', '.join(x))
+        route_keys['key'] = route_keys['key1'] + '_' + route_keys['key2']
+        return route_keys
+
+    def __add_prev_next_stations(self, data: pd.DataFrame) -> pd.DataFrame:
+        data['prev_stations'] = data.groupby(['id', 'relacja'])['stacja'].shift(1)
+        data['next_stations'] = data.groupby(['id', 'relacja'])['stacja'].shift(-1)
+        return data
+
+    def __filter_and_merge_routes(self, data: pd.DataFrame, routes_data: pd.DataFrame) -> pd.DataFrame:
+        merged_df = data.merge(
+            routes_data,
+            how='left',
+            on=['key', 'relacja', 'stacja', 'lat', 'lon', 'prev_stations', 'next_stations']
+        )
+        keys_to_remove = merged_df[merged_df['distances'].isna()]['key'].unique()
+        merged_df = merged_df[~merged_df['key'].isin(keys_to_remove)].reset_index(drop=True)
+        return merged_df
+    
     @staticmethod
     def prepare_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -154,3 +193,12 @@ class DataAssembler:
 
         return df
     
+    @staticmethod
+    def unique_list_preserve_order(input_list: list):
+        seen = set()
+        unique_items = []
+        for item in input_list:
+            if item not in seen:
+                unique_items.append(item)
+                seen.add(item)
+        return unique_items
