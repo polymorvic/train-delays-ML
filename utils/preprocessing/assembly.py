@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from haversine import haversine, Unit
 from scipy.spatial import cKDTree
-from .const import MAIN_RAILWAY_STATIONS
+from .const import MAIN_RAILWAY_STATIONS, MODELING_READY_COLNAMES_BLACKLIST
 
 
 class LoadMethodSelector:
@@ -94,7 +94,7 @@ class DataAssembler:
         self.__merge_gus_data()
 
         if self.autosave:
-            self.prepared_for_modeling_delays_df.to_parquet(f'{self.OUTPUT_DATA_DIR}/ready_to_modeling_data_{self.TIMESTAMP}.parquet')
+            self.prepared_for_modeling_delays_df[MODELING_READY_COLNAMES_BLACKLIST].drop_duplicates().reset_index(drop=True).to_parquet(f'{self.OUTPUT_DATA_DIR}/ready_to_modeling_data_{self.TIMESTAMP}.parquet')
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
