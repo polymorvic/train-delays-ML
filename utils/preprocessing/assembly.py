@@ -2,6 +2,9 @@ from pathlib import Path
 from typing import Callable
 import pandas as pd
 import numpy as np
+from haversine import haversine, Unit
+from scipy.spatial import cKDTree
+from .const import MAIN_RAILWAY_STATIONS
 
 
 class LoadMethodSelector:
@@ -76,6 +79,7 @@ class DataAssembler:
         self.__prepare_raw_data_stations_merge()
         self.__count_stations()
         self.__merge_routes_data()
+        self.__calculate_distances()
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
@@ -105,6 +109,11 @@ class DataAssembler:
 
         self.prepared_for_modeling_delays_df = merged_df
 
+    def __calculate_distances(self) -> None:
+        df_out = self.prepared_for_modeling_delays_df.copy()
+        df_out = self.__add_cumulative_distance_features(df_out)
+        df_out = self.__add_nearest_big_city_distance(df_out)
+        self.prepared_for_modeling_delays_df = df_out
 
     def __create_route_keys(self, data: pd.DataFrame) -> pd.DataFrame:
         route_keys = (
@@ -131,6 +140,28 @@ class DataAssembler:
         keys_to_remove = merged_df[merged_df['distances'].isna()]['key'].unique()
         merged_df = merged_df[~merged_df['key'].isin(keys_to_remove)].reset_index(drop=True)
         return merged_df
+    
+    def __add_cumulative_distance_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['cumsum_distances'] = df.groupby('id')['distances'].cumsum()
+        df['distance_to_finish'] = df.groupby('id')['cumsum_distances'].transform(lambda x: x.iloc[::-1])
+        df[['distances', 'cumsum_distances', 'distance_to_finish']] /= 1000
+        return df
+
+    def __add_nearest_big_city_distance(self, df: pd.DataFrame) -> pd.DataFrame:
+        big_city_stations = self.__get_big_city_stations()
+        station_coords = big_city_stations[['lat', 'lon']].to_numpy()
+        kdtree = cKDTree(station_coords)
+
+        query_coords = df[['lat', 'lon']].to_numpy()
+        _, indices = kdtree.query(query_coords, k=1)
+
+        distances = self.__calculate_haversine_distances(df, big_city_stations, indices)
+        df['nearest_big_city_distance'] = distances
+        return df
+
+    def __get_big_city_stations(self) -> pd.DataFrame:
+        stations_df = self.dataframes['stations']
+        return stations_df[stations_df['stacja'].isin(MAIN_RAILWAY_STATIONS)].reset_index(drop=True)
     
     @staticmethod
     def prepare_raw_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -202,3 +233,14 @@ class DataAssembler:
                 unique_items.append(item)
                 seen.add(item)
         return unique_items
+    
+    @staticmethod
+    def __calculate_haversine_distances(df: pd.DataFrame, big_city_stations: pd.DataFrame, indices: np.ndarray) -> list[float]:
+        return [
+            haversine(
+                (row.lat, row.lon),
+                (big_city_stations.iloc[idx]['lat'], big_city_stations.iloc[idx]['lon']),
+                unit=Unit.KILOMETERS
+            )
+            for row, idx in zip(df.itertuples(index=False), indices)
+        ]

@@ -1,0 +1,18 @@
+MAIN_RAILWAY_STATIONS: list[str] = [
+    'Wrocław Główny',
+    'Kraków Główny',
+    'Warszawa Centralna',
+    'Szczecin Główny',
+    'Rzeszów Główny',
+    'Gdańsk Wrzeszcz',
+    'Łódź Widzew',
+    'Kołobrzeg',
+    'Poznań Główny',
+    'Katowice',
+    'Białystok',
+    'Częstochowa Stradom',
+    'Lublin Główny',
+    'Bydgoszcz Główna',
+    'Olsztyn Główny',
+    'Gdynia Główna',
+    ]
