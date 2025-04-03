@@ -143,7 +143,7 @@ class DataAssembler:
     
     def __add_cumulative_distance_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df['cumsum_distances'] = df.groupby('id')['distances'].cumsum()
-        df['distance_to_finish'] = df.groupby('id')['cumsum_distances'].transform(lambda x: x.iloc[::-1])
+        df['distance_to_finish'] = df.groupby('id')['cumsum_distances'].transform(lambda x: x.max() - x)
         df[['distances', 'cumsum_distances', 'distance_to_finish']] /= 1000
         return df
 
