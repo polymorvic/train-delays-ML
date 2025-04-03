@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Callable
+from datetime import datetime
 import pandas as pd
 import numpy as np
 from haversine import haversine, Unit
@@ -37,8 +38,10 @@ class LoadMethodSelector:
 class DataAssembler:
     PREPROCESSED_DATA_DIR = Path('data/preprocessed')
     GUS_EXTERNAL_DATA_DIR = Path('data/external/gus')
+    OUTPUT_DATA_DIR = Path('data/ready_for_modeling')
     OUTPUT_DIR = Path('data/ready_for_modeling')
     FILE_ENCODING = 'utf-8'
+    TIMESTAMP = datetime.now().strftime('%Y%m%d_%H_%M_%S')
 
     def __init__(self, main_delays_data_filename: str,
                  stations_data_filename: str,
@@ -80,7 +83,6 @@ class DataAssembler:
         return loaded
     
     def run_assembling(self) -> None:
-
         self.__prepare_raw_data_stations_merge()
         self.__count_stations()
         self.__merge_routes_data()
@@ -89,6 +91,10 @@ class DataAssembler:
         self.__add_stop_duration_features()
         self.__apply_date_features()
         self.__merge_area_railway_infrastructure()
+        self.__merge_gus_data()
+
+        if self.autosave:
+            self.prepared_for_modeling_delays_df.to_parquet(f'{self.OUTPUT_DATA_DIR}/ready_to_modeling_data_{self.TIMESTAMP}.parquet')
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
@@ -183,6 +189,20 @@ class DataAssembler:
         )
 
         self.prepared_for_modeling_delays_df = df
+
+    def __merge_gus_data(self) -> None:
+        df_out = self.prepared_for_modeling_delays_df.copy()
+        gus_districts = self.dataframes['gus_district'][[
+            'id_gmina', 'powierzchnia_km2_gmina', 'ludnosc_gmina', 'gestosc_zaludnienia_1km2_gmina'
+        ]]
+        gus_counties = self.dataframes['gus_counties'][[
+            'id_powiat', 'powierzchnia_km2_powiat', 'ludnosc_powiat', 'gestosc_zaludnienia_1km2_powiat'
+        ]]
+
+        df_out = df_out.merge(gus_districts, how='left', on='id_gmina')
+        df_out = df_out.merge(gus_counties, how='left', on='id_powiat')
+
+        self.prepared_for_modeling_delays_df = df_out
 
     def __create_route_keys(self, data: pd.DataFrame) -> pd.DataFrame:
         route_keys = (
