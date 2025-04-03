@@ -80,6 +80,7 @@ class DataAssembler:
         self.__count_stations()
         self.__merge_routes_data()
         self.__calculate_distances()
+        self.__merge_weather_data()
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
@@ -114,6 +115,24 @@ class DataAssembler:
         df_out = self.__add_cumulative_distance_features(df_out)
         df_out = self.__add_nearest_big_city_distance(df_out)
         self.prepared_for_modeling_delays_df = df_out
+
+    def __merge_weather_data(self) -> None:
+        weather = self.dataframes['weather'].copy()
+
+        weather.drop(columns=['stations', 'source', 'tzoffset', 'datetimeEpoch'], inplace=True, errors='ignore')
+        weather['datetime_merge'] = pd.to_datetime(weather['date'].astype(str) + ' ' + weather['datetime'].astype(str))
+
+        df_out = self.prepared_for_modeling_delays_df.copy()
+        df_out['datetime_merge'] = df_out['arrival_on_time'].dt.floor('h')
+
+        merged_df = pd.merge(
+            df_out,
+            weather,
+            how='left',
+            on=['lat', 'lon', 'datetime_merge']
+        ).drop(columns=['date', 'datetime_merge', 'datetime'], errors='ignore')
+
+        self.prepared_for_modeling_delays_df = merged_df
 
     def __create_route_keys(self, data: pd.DataFrame) -> pd.DataFrame:
         route_keys = (
