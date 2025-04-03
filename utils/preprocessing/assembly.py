@@ -60,15 +60,20 @@ class DataAssembler:
             'gus_district': (gus_district_data_filename, self.GUS_EXTERNAL_DATA_DIR),
             'gus_counties': (gus_counties_data_filename, self.GUS_EXTERNAL_DATA_DIR),
             }
+        self.file_read_options = {
+            'gus_district': {'sep': ';'},
+            'gus_counties': {'sep': ';'},
+        }
         self.dataframes = self.__load_data()
         self.prepared_for_modeling_delays_df = None
         
-    def __load_data(self) -> tuple[pd.DataFrame, ...]:
+    def __load_data(self) -> dict[str, pd.DataFrame]:
         loaded = {}
         for key, (fname, directory) in self.filenames.items():
             file_path = directory / fname
             try:
-                df = self.loader.load(file_path)
+                kwargs = self.file_read_options.get(key, {})
+                df = self.loader.load(file_path, **kwargs)
                 loaded[key] = df
             except Exception as e:
                 raise RuntimeError(f"[DataAssembler] Failed to load '{file_path}': {e}") from e
