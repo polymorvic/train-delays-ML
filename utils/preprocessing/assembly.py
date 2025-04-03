@@ -82,6 +82,7 @@ class DataAssembler:
         self.__calculate_distances()
         self.__merge_weather_data()
         self.__add_stop_duration_features()
+        self.__apply_date_features()
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
@@ -148,6 +149,16 @@ class DataAssembler:
                 .fillna(-1)
             )
         df = pd.concat([df, pd.DataFrame(lag_features)], axis=1)
+        self.prepared_for_modeling_delays_df = df
+
+    def __apply_date_features(self) -> None:
+        df = self.prepared_for_modeling_delays_df.copy()
+
+        for col in ['arrival_on_time', 'departure_on_time']:
+            df = self.fix_dates(df, col)
+
+        df = self.add_date_features(df)
+
         self.prepared_for_modeling_delays_df = df
 
     def __create_route_keys(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -279,3 +290,57 @@ class DataAssembler:
             )
             for row, idx in zip(df.itertuples(index=False), indices)
         ]
+    
+    @staticmethod
+    def fix_dates(df: pd.DataFrame, col_name: str) -> pd.DataFrame:
+        np_day = np.timedelta64(1, 'D')
+        dfs = []
+
+        for pk, df_group in df.groupby('id'):
+            dates = df_group[col_name].values
+            diff = (dates[1:] - dates[:-1]) / np_day
+            change_indices = np.where(diff < 0)[0]
+
+            if change_indices.size:
+                change_on = change_indices[0] + 1
+                df_group.loc[df_group.index[change_on]:, col_name] += pd.Timedelta(days=1)
+
+            dfs.append(df_group)
+
+        return pd.concat(dfs, ignore_index=True)
+
+    @staticmethod
+    def add_date_features(df: pd.DataFrame) -> pd.DataFrame:
+        dt_col = 'arrival_on_time'
+
+        df['month'] = df[dt_col].dt.month
+        df['weekofyear'] = df[dt_col].dt.isocalendar().week
+        df['yearday'] = df[dt_col].dt.dayofyear
+        df['monthday'] = df[dt_col].dt.day
+        df['weekday'] = df[dt_col].dt.dayofweek
+        df['hour'] = df[dt_col].dt.hour
+        df['minute'] = df[dt_col].dt.minute
+        df['second'] = df[dt_col].dt.second
+
+        cyclical = {
+            'month': 12, 'weekofyear': 52, 'yearday': 365, 
+            'monthday': 31, 'weekday': 7, 'hour': 24, 'minute': 60, 'second': 60
+        }
+
+        for col, period in cyclical.items():
+            df[f'{col}_sin'] = np.sin(2 * np.pi * df[col] / period)
+            df[f'{col}_cos'] = np.cos(2 * np.pi * df[col] / period)
+
+        df.drop(list(cyclical.keys()), axis=1, inplace=True)
+
+        def days_until(row, month, day):
+            current_year = row[dt_col].year
+            holiday = pd.Timestamp(year=current_year, month=month, day=day)
+            return (holiday - row[dt_col]).days
+
+        df['days_until_christmas'] = df.apply(lambda row: days_until(row, 12, 25), axis=1)
+        df['days_until_november_1_st'] = df.apply(lambda row: days_until(row, 11, 1), axis=1)
+        df['days_until_new_year_eve'] = df.apply(lambda row: days_until(row, 12, 31), axis=1)
+        df['days_until_easter'] = df.apply(lambda row: days_until(row, 4, 5), axis=1)
+
+        return df
