@@ -81,6 +81,7 @@ class DataAssembler:
         self.__merge_routes_data()
         self.__calculate_distances()
         self.__merge_weather_data()
+        self.__add_stop_duration_features()
 
     def __prepare_raw_data_stations_merge(self) -> None:
         main_delays_df = self.dataframes['main_delays']
@@ -133,6 +134,21 @@ class DataAssembler:
         ).drop(columns=['date', 'datetime_merge', 'datetime'], errors='ignore')
 
         self.prepared_for_modeling_delays_df = merged_df
+
+    def __add_stop_duration_features(self) -> None:
+        df = self.prepared_for_modeling_delays_df.copy()
+        df['stop_duration'] = (df['departure_on_time'] - df['arrival_on_time']).dt.total_seconds() / 60
+
+        lag_features = {}
+        for i in range(1, 7):
+            lag_col = f'stop_duration_lag{i}'
+            lag_features[lag_col] = (
+                df.groupby(['id', 'relacja'])['stop_duration']
+                .shift(i)
+                .fillna(-1)
+            )
+        df = pd.concat([df, pd.DataFrame(lag_features)], axis=1)
+        self.prepared_for_modeling_delays_df = df
 
     def __create_route_keys(self, data: pd.DataFrame) -> pd.DataFrame:
         route_keys = (
