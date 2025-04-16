@@ -18,7 +18,7 @@ MAIN_RAILWAY_STATIONS: list[str] = [
     ]
 
 MODELING_READY_COLNAMES_BLACKLIST: list[str] = [
-    'id',
+    # 'id',
     'arrival_on_time',
     'departure_on_time',
     'station_count_on_curr_station',
