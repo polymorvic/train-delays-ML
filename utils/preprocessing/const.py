@@ -50,6 +50,87 @@ CATEGORY_COLUMNS: list[str] = [
     'next_stations',
     ]
 
-TARGETS_COL_ARRIVAL: str = 'opóźnienie przyjazdu'
+SOURCE_TARGETS_COL_ARRIVAL: str = 'opóźnienie przyjazdu'
 
-TARGETS_COL_DEPARTURE: str = 'opóźnienie odjazdu'
+SOURCE_TARGETS_COL_DEPARTURE: str = 'opóźnienie odjazdu'
+
+ML_TARGET_CLASS_NAME: str = 'ml_target_class'
+
+ML_TARGET_REG_NAME: str = 'ml_target_reg'
+
+NODE_FEATS: list[str] = [
+    'stacja_id',
+    'prev_stations_id',
+    'next_stations_id',
+    'lat',
+    'lon',
+    'nearest_big_city_distance',
+    'temp',
+    'feelslike',
+    'humidity',
+    'dew',
+    'precip',
+    'precipprob',
+    'snow',
+    'snowdepth',
+    'windgust',
+    'windspeed',
+    'winddir',
+    'pressure',
+    'visibility',
+    'cloudcover',
+    'solarradiation',
+    'solarenergy',
+    'uvindex',
+    'stop_duration',
+    'stop_duration_lag1',
+    'stop_duration_lag2',
+    'stop_duration_lag3',
+    'stop_duration_lag4',
+    'stop_duration_lag5',
+    'stop_duration_lag6',
+    'month_sin',
+    'month_cos',
+    'weekofyear_sin',
+    'weekofyear_cos',
+    'yearday_sin',
+    'yearday_cos',
+    'monthday_sin',
+    'monthday_cos',
+    'weekday_sin',
+    'weekday_cos',
+    'hour_sin',
+    'hour_cos',
+    'minute_sin',
+    'minute_cos',
+    'second_sin',
+    'second_cos',
+    'days_until_christmas',
+    'days_until_november_1_st',
+    'days_until_new_year_eve',
+    'days_until_easter',
+    'railway_distance_gmina',
+    'stations_odometer_gmina',
+    'level_crossing_odometer_gmina',
+    'switches_odometer_gmina',
+    'railway_distance_powiat',
+    'stations_odometer_powiat',
+    'level_crossing_odometer_powiat',
+    'switches_odometer_powiat',
+    'powierzchnia_km2_gmina',
+    'ludnosc_gmina',
+    'gestosc_zaludnienia_1km2_gmina',
+    'powierzchnia_km2_powiat',
+    'ludnosc_powiat',
+    'gestosc_zaludnienia_1km2_powiat',
+    ]
+
+EDGE_FEATS: list[str] = [
+    'relacja_id',
+    'train_type_id',
+    'traction_type_id',
+    'key_id',
+    'distances',
+    'level_crossing_count',
+    'switches_count',
+    ]
