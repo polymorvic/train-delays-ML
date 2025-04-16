@@ -6,7 +6,7 @@ from pathlib import Path
 from .assembly import DataAssembler
 from .const import (MODELING_READY_COLNAMES_BLACKLIST, CATEGORY_COLUMNS, SOURCE_TARGETS_COL_ARRIVAL, 
                     SOURCE_TARGETS_COL_DEPARTURE, NODE_FEATS, EDGE_FEATS, ML_TARGET_REG_NAME, ML_TARGET_CLASS_NAME)
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 class GNNPreprocessor(DataAssembler):
     ML_TARGET_CLASSIFICATION_COLNAME: str = 'ml_target_class'
@@ -19,19 +19,22 @@ class GNNPreprocessor(DataAssembler):
         try:
             self.df = pd.read_parquet(filepath)
             self.encoder = LabelEncoder()
+            self.scaler_node = StandardScaler()
+            self.scaler_edge = StandardScaler()
         except Exception as e:
             print(f'Something went wrong reading the file: {e}')
 
     def model_data(self) -> None:
-        self.__remove_cols_fillna()
+        self.__remove_cols()
         self.__category_mapping()
         self.__make_ml_targets()
+        self.__fill_missing_values()
+        self.__scale_features()
 
-    def __remove_cols_fillna(self) -> None:
+    def __remove_cols(self) -> None:
         self.df = self.df\
             .drop(MODELING_READY_COLNAMES_BLACKLIST + [SOURCE_TARGETS_COL_DEPARTURE], axis=1)\
-            .drop_duplicates()\
-            .fillna(-1)
+            .drop_duplicates()
 
     def __category_mapping(self) -> None:
         for i, col in enumerate(CATEGORY_COLUMNS):
@@ -54,6 +57,26 @@ class GNNPreprocessor(DataAssembler):
         delay_col = self.df.pop(self.ML_TARGET_REGRESSION_COLNAME)
         self.df[self.ML_TARGET_REGRESSION_COLNAME] = delay_col
 
+    def __fill_missing_values(self) -> None:
+        self.df[NODE_FEATS] = self.df[NODE_FEATS].fillna(self.df[NODE_FEATS].mean())
+        self.df[EDGE_FEATS] = self.df[EDGE_FEATS].fillna(self.df[EDGE_FEATS].mean())
+
+    def __scale_features(self) -> None:
+        skip_keys = ['sin', 'cos', 'id', 'lat', 'lon']
+            
+        node_feats_to_scale = [
+            col for col in NODE_FEATS
+            if all(x not in col for x in skip_keys)
+        ]
+        edge_feats_to_scale = [
+            col for col in EDGE_FEATS
+            if all(x not in col for x in skip_keys)
+        ]
+
+        self.df[node_feats_to_scale] = self.scaler_node.fit_transform(self.df[node_feats_to_scale])
+        self.df[edge_feats_to_scale] = self.scaler_edge.fit_transform(self.df[edge_feats_to_scale])
+
+        
 class RailwayDataset(GNNPreprocessor, InMemoryDataset):
     ROUTE_UNIQUE_ID: str = 'id'
 
