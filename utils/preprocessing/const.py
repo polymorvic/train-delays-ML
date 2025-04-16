@@ -39,3 +39,17 @@ MODELING_READY_COLNAMES_BLACKLIST: list[str] = [
     'nazwa_gmina',
     'id_gmina',
     ]
+
+CATEGORY_COLUMNS: list[str] = [
+    'relacja',
+    'stacja',
+    'train_type',
+    'traction_type',
+    'key',
+    'prev_stations',
+    'next_stations',
+    ]
+
+TARGETS_COL_ARRIVAL: str = 'opóźnienie przyjazdu'
+
+TARGETS_COL_DEPARTURE: str = 'opóźnienie odjazdu'
